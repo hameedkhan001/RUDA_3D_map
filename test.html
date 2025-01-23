@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Cesium WFS Data and WMS Layers Visualization</title>
+
+    <!-- Cesium CSS -->
+    <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Widgets/widgets.css"
+        type="text/css">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.104/Apps/Sandcastle-header.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.js"
+        integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4=" crossorigin="anonymous"></script>
+
+
+    <!-- Cesium JavaScript -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Cesium.js"></script>
+
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .three-bar {
+            width: 35px;
+            height: 5px;
+            background-color: black;
+            margin: 6px 0;
+        }
+
+        #cesiumContainer {
+            height: 100%;
+            width: 100%;
+        }
+
+        #layerControl {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            max-height: 90%;
+            width: 200px;
+            overflow-y: auto;
+        }
+
+        #layerControl h3 {
+            margin: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        #layerControl label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+
+        #layerControl input[type="checkbox"] {
+            margin-right: 10px;
+        }
+
+        #layerDropdownContainer {
+            position: absolute;
+            top: 0px;
+            left: 220px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        #layerDropdown {
+            margin-top: 10px;
+        }
+
+        #zoomButton {
+            position: absolute;
+            top: 0px;
+            bottom: 655px;
+            left: 413px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            font-family: sans-serif;
+        }
+
+        #zoomButton:hover {
+            background: rgba(255, 255, 255, 1);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="zoomButton">Zoom to 3D Model</div>
+    <div id="layerControl">
+        <div style="display: flex;flex-direction: row;">
+            <div class="toggleClass" style="cursor: pointer;width: 60px;">
+                <div class="three-bar"></div>
+                <div class="three-bar"></div>
+                <div class="three-bar"></div>
+            </div>
+            <div style="    width: 100px;
+        line-height: 41px;
+        font-size: 17px;
+        font-weight: bold;">Layers</div>
+        </div>
+        <div id="layerCheckboxes"></div>
+    </div>
+    <div id="layerDropdownContainer">
+        <select id="layerDropdown">
+            <option value="">-- Select Layer to Zoom --</option>
+            <option value="ruda:precinct_boundary">Precinct Boundary</option>
+            <option value="ruda:private_schemes">Private Schemes</option>
+        </select>
+    </div>
+    <div id="wfsLayerControl">
+        <h3>WFS Layers</h3>
+        <div id="wfsLayerCheckboxes"></div>
+    </div>
+
+
+    <script>
+        // Initialize CesiumJS viewer
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2Y2EzZjlhMi0zMTdiLTRhZDktOTI1ZC1jMzU3YmZkZThjZTQiLCJpZCI6ODExNjUsImlhdCI6MTY3NDU0MzkzN30.QOZpNY9wcDdE0SOwsk0dKXj46MZMXNUCxh53kuwVwvg';
+        const cesiumViewer = new Cesium.Viewer('cesiumContainer', {
+            imageryProvider: Cesium.createWorldImagery(),
+            baseLayerPicker: true,
+            geocoder: false,
+            homeButton: true,
+            sceneModePicker: true,
+            timeline: true,
+            animation: true,
+            navigationHelpButton: false,
+            infoBox: true,
+            selectionIndicator: true
+        });
+
+        // Set the initial camera view to show the entire globe
+        cesiumViewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000) // A high altitude to view the entire globe
+        });
+
+        // Add WMS layers
+        const wmsBaseUrl = 'http://citypulse.config-panel.com:8080/geoserver/ruda/wms';
+
+        const wmsLayers = [
+            { layerName: 'ruda:district_boundary', name: 'District Boundary' },
+            { layerName: 'ruda:precinct_boundary', name: 'Precinct Boundary' },
+            { layerName: 'ruda:tehsils_boundary', name: 'Tehsils Boundary' },
+            { layerName: 'ruda:villages_boundary', name: 'Villages Boundary' },
+            { layerName: 'ruda:jurisdiction_boundary', name: 'Jurisdiction Boundary' },
+            { layerName: 'ruda:planning_boundary', name: 'Planning Boundary' },
+            { layerName: 'ruda:private_schemes', name: 'Private Schemes' },
+            { layerName: 'ruda:phases_boundary', name: 'Phases Boundary' },
+            { layerName: 'ruda:barrages', name: 'Ruda Barrages' },
+            { layerName: 'ruda:bridge', name: 'Ruda Bridge' }
+        ];
+
+        const layerCheckboxes = document.getElementById('layerCheckboxes');
+        const layerObjects = {};
+
+        // Dynamically add checkboxes
+        wmsLayers.forEach(layer => {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = layer.layerName;
+            checkbox.dataset.layerName = layer.layerName;
+
+            const label = document.createElement('label');
+            label.htmlFor = layer.layerName;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(layer.name));
+
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    const imageryLayer = cesiumViewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+                        url: wmsBaseUrl,
+                        layers: layer.layerName,
+                        parameters: {
+                            transparent: true,
+                            format: 'image/png'
+                        }
+                    }));
+                    layerObjects[layer.layerName] = imageryLayer;
+                } else {
+                    const imageryLayer = layerObjects[layer.layerName];
+                    if (imageryLayer) {
+                        cesiumViewer.imageryLayers.remove(imageryLayer);
+                        delete layerObjects[layer.layerName];
+                    }
+                }
+            });
+
+            layerCheckboxes.appendChild(label);
+        });
+
+        // Toggle layer control visibility
+        $(document).ready(function () {
+            $('body').on('click', '.toggleClass', function () {
+                $('#layerCheckboxes').toggle();
+            });
+        });
+
+
+        // Add zoom functionality to dropdown layers
+        const layerDropdown = document.getElementById('layerDropdown');
+        layerDropdown.addEventListener('change', () => {
+            const selectedLayer = wmsLayers.find(layer => layer.layerName === layerDropdown.value);
+            if (selectedLayer) {
+                // Assuming bounding box or center coordinates are known
+                const zoomCoordinates = {
+                    'ruda:precinct_boundary': { lon: 74.27273384037098, lat: 31.596522592556912, height: 5000 },     //31.5486, 74.2838
+                    'ruda:private_schemes': { lon: 74.27273384037098, lat: 31.596522592556912, height: 5000 }
+                };
+                const coords = zoomCoordinates[selectedLayer.layerName];
+                cesiumViewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(coords.lon, coords.lat, coords.height)
+                });
+            }
+        });
+
+        // Fetch WFS data and render polygons
+        const wfsUrl = 'http://citypulse.config-panel.com:8080/geoserver/ruda/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=ruda%3Abuilding_footprint&maxFeatures=50000&outputFormat=application%2Fjson';
+
+        fetch(wfsUrl)
+            .then(response => response.json())
+            .then(data => {
+                data.features.forEach(feature => {
+                    const coordinates = feature.geometry.coordinates;
+                    const height = feature.properties.Height;
+
+                    // Create a polygon hierarchy for the building footprint
+                    const polygonHierarchy = new Cesium.PolygonHierarchy(
+                        Cesium.Cartesian3.fromDegreesArrayHeights(
+                            coordinates[0][0].flatMap(coord => [coord[0], coord[1], height])
+                        )
+                    );
+
+                    // Add the polygon as an entity with InfoBox support
+                    cesiumViewer.entities.add({
+                        name: 'Building Footprint',
+                        description: `
+                    <table>
+                        <tr><th>Phase</th><td>${feature.properties.Phase || 'N/A'}</td></tr>
+                        <tr><th>Phase Name</th><td>${feature.properties.Phase_name || 'N/A'}</td></tr>
+                        <tr><th>Raster Value</th><td>${feature.properties.RASTERVALU || 'N/A'}</td></tr>
+                        <tr><th>Height</th><td>${height || 'N/A'}</td></tr>
+                    </table>
+                `,
+                        polygon: {
+                            hierarchy: polygonHierarchy,
+                            material: Cesium.Color.GREY.withAlpha(0.9),
+                            extrudedHeight: height,
+                            outline: true,
+                            outlineColor: Cesium.Color.WHITE
+                        }
+                    });
+                });
+            })
+            .catch(error => console.error('Error fetching WFS data:', error));
+
+        // Add click event listener to the globe
+        cesiumViewer.screenSpaceEventHandler.setInputAction((click) => {
+            // Get the clicked position on the globe
+            const pickedObject = cesiumViewer.scene.pick(click.position);
+
+            if (pickedObject && pickedObject.id) {
+                // Highlight the clicked entity
+                cesiumViewer.selectedEntity = pickedObject.id; // Triggers the Cesium InfoBox
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+
+
+        //          // Fetch WFS data and render polygons
+        // const wfsUrl = 'http://citypulse.config-panel.com:8080/geoserver/ruda/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=ruda%3Abuilding_footprint&maxFeatures=50000&outputFormat=application%2Fjson';
+
+        // fetch(wfsUrl)
+        //     .then(response => response.json())
+        //     .then(data => {
+        //         let roofToggle = true; // Toggle flag to alternate roof textures
+        //         let wallToggle = true; // Toggle flag to alternate wall textures
+
+        //         data.features.forEach(feature => {
+        //             const coordinates = feature.geometry.coordinates;
+        //             const height = feature.properties.Height;
+
+        //             // Create a polygon hierarchy for the building footprint
+        //             const polygonHierarchy = new Cesium.PolygonHierarchy(
+        //                 Cesium.Cartesian3.fromDegreesArrayHeights(
+        //                     coordinates[0][0].flatMap(coord => [coord[0], coord[1], height])
+        //                 )
+        //             );
+
+        //             // Select the roof texture based on the roof toggle flag
+        //             const roofTexturePath = roofToggle ? 'texture/roof.jpg' : 'texture/roofs.jpg';
+        //             roofToggle = !roofToggle; // Alternate roof texture for the next polygon
+
+        //             // Select the wall texture based on the wall toggle flag
+        //             const wallTexturePath = wallToggle ? 'texture/wall.jpg' : 'texture/walls.jpg';
+        //             wallToggle = !wallToggle; // Alternate wall texture for the next polygon
+
+        //             // Add the polygon as an entity with alternating textures for roof and walls
+        //             cesiumViewer.entities.add({
+        //                 name: 'Building Footprint',
+        //                 description: `
+        //                     <table>
+        //                         <tr><th>Phase</th><td>${feature.properties.Phase || 'N/A'}</td></tr>
+        //                         <tr><th>Phase Name</th><td>${feature.properties.Phase_name || 'N/A'}</td></tr>
+        //                         <tr><th>Raster Value</th><td>${feature.properties.RASTERVALU || 'N/A'}</td></tr>
+        //                         <tr><th>Height</th><td>${height || 'N/A'}</td></tr>
+        //                     </table>
+        //                 `,
+        //                 polygon: {
+        //                     hierarchy: polygonHierarchy,
+        //                     extrudedHeight: height,
+        //                     material: new Cesium.ImageMaterialProperty({
+        //                         image: wallTexturePath, // Path to the alternating wall texture
+        //                         repeat: new Cesium.Cartesian2(1, 1), // Adjust texture repetition
+        //                         transparent: false // Set to true if the wall texture has transparency
+        //                     }),
+        //                     outline: true,
+        //                     outlineColor: Cesium.Color.WHITE
+        //                 },
+        //                 // Adding a separate material for the roof using the roof texture
+        //                 polyline: {
+        //                     material: new Cesium.ImageMaterialProperty({
+        //                         image: roofTexturePath, // Path to the alternating roof texture
+        //                         repeat: new Cesium.Cartesian2(1, 1), // Adjust texture repetition for the roof
+        //                         transparent: true // Set to true if the roof texture has transparency
+        //                     })
+        //                 },
+        //                 // Close the top (roof) and bottom (base) for proper rendering
+        //                 closeTop: true,
+        //                 closeBottom: true
+        //             });
+        //         });
+        //     })
+        //     .catch(error => console.error('Error fetching WFS data:', error));
+
+        // // Add click event listener to the globe
+        // cesiumViewer.screenSpaceEventHandler.setInputAction((click) => {
+        //     // Get the clicked position on the globe
+        //     const pickedObject = cesiumViewer.scene.pick(click.position);
+
+        //     if (pickedObject && pickedObject.id) {
+        //         // Highlight the clicked entity
+        //         cesiumViewer.selectedEntity = pickedObject.id; // Triggers the Cesium InfoBox
+        //     }
+        // }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+
+
+        // // Load and add GLTF model
+        // const modelPosition = Cesium.Cartesian3.fromDegrees(74.28384545869116, 31.548614874203963, 5);
+
+        // cesiumViewer.scene.primitives.add(Cesium.Model.fromGltf({
+        //     url: './asia_building/scene.gltf',
+        //     modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(modelPosition),
+        //     scale: 6
+        // }));
+
+        // // Adjust camera to higher altitude
+        // cesiumViewer.camera.flyTo({
+        //     destination: Cesium.Cartesian3.fromDegrees(74.28384545869116, 31.548614874203963, 10000),
+        //     orientation: {
+        //         heading: Cesium.Math.toRadians(0.0),
+        //         pitch: Cesium.Math.toRadians(-55.0),
+        //         roll: 0.0
+        //     }
+        // });
+
+        // Define the model's position
+        const modelLongitude = 74.30450573695148;     //74.28384545869116
+        const modelLatitude = 31.60834745796893;       //31.548614874203963      
+        const modelHeight = 5;
+
+        // Load and add GLTF model
+        const modelPosition = Cesium.Cartesian3.fromDegrees(modelLongitude, modelLatitude, modelHeight);
+        cesiumViewer.scene.primitives.add(Cesium.Model.fromGltf({
+            url: './asia_building/scene.gltf',
+            modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(modelPosition),
+            scale: 0.6
+        }));
+
+        // Function to zoom to the 3D model
+        function zoomToModel() {
+            cesiumViewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(modelLongitude, modelLatitude, 10000),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0.0),
+                    pitch: Cesium.Math.toRadians(-55.0),
+                    roll: 0.0
+                }
+            });
+        }
+
+        // Add event listener to the model button
+        document.getElementById('zoomButton').addEventListener('click', zoomToModel);
+
+    </script>
+</body>
+
+</html>
